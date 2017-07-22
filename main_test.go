@@ -1,20 +1,19 @@
-package main_test
+package main
 
 import (
 	"os"
 	"testing"
-
-	"github.com/dkazakevich/redis"
 	"net/http"
 	"net/http/httptest"
 	"bytes"
 	"encoding/json"
 )
 
-var a main.App
+var a App
 
 func TestMain(m *testing.M) {
-	a = main.App{}
+
+	a = App{}
 	a.Initialize()
 	code := m.Run()
 	os.Exit(code)
@@ -22,64 +21,62 @@ func TestMain(m *testing.M) {
 
 func TestGetNonExistentItem(t *testing.T) {
 
-	req, _ := http.NewRequest("GET", "/cache/string", nil)
-	response := executeRequest(req)
-
-	checkResponseCode(t, http.StatusNotFound, response.Code)
+	executeRequest(t, "GET", "/api/v1/values/string", nil, http.StatusNotFound)
 }
 
-func TestPutItem(t *testing.T) {
+func TestPut(t *testing.T) {
 
-	payload := []byte(`"value"`)
+	buff, _ := json.Marshal("value")
+	response := executeRequest(t, "PUT", "/api/v1/values/string", buff, http.StatusOK)
 
-	req, _ := http.NewRequest("PUT", "/cache/string", bytes.NewBuffer(payload))
-	response := executeRequest(req)
-
-	checkResponseCode(t, http.StatusOK, response.Code)
-
-	var value string
-	json.Unmarshal(response.Body.Bytes(), &value)
-
-	if value != "value" {
-		t.Errorf("Expected: 'value'. Actual: '%v'", value)
-	}
+	var result map[string]interface{}
+	json.Unmarshal(response.Body.Bytes(), &result)
+	assertEqual(t, "value", result["value"])
 }
 
-func TestGetExistentItem(t *testing.T) {
+func TestGet(t *testing.T) {
 
-	req, _ := http.NewRequest("GET", "/cache/string", nil)
-	response := executeRequest(req)
+	response := executeRequest(t, "GET", "/api/v1/values/string", nil, http.StatusOK)
 
-	checkResponseCode(t, http.StatusOK, response.Code)
-
-	var value string
-	json.Unmarshal(response.Body.Bytes(), &value)
-
-	if value != "value" {
-		t.Errorf("Expected: 'value'. Actual: '%v'", value)
-	}
+	var result map[string]interface{}
+	json.Unmarshal(response.Body.Bytes(), &result)
+	assertEqual(t, "value", result["value"])
 }
 
-func TestDeleteItem(t *testing.T) {
+func TestDelete(t *testing.T) {
 
-	req, _ := http.NewRequest("DELETE", "/cache/string", nil)
-	response := executeRequest(req)
-	checkResponseCode(t, http.StatusOK, response.Code)
-
-	req, _ = http.NewRequest("GET", "/cache/string", nil)
-	response = executeRequest(req)
-	checkResponseCode(t, http.StatusNotFound, response.Code)
+	executeRequest(t, "DELETE", "/api/v1/values/string", nil, http.StatusOK)
+	executeRequest(t, "GET", "/api/v1/values/string", nil, http.StatusNotFound)
 }
 
-func executeRequest(req *http.Request) *httptest.ResponseRecorder {
+func TestExpire(t *testing.T) {
+
+	buff, _ := json.Marshal("value")
+	executeRequest(t, "PUT", "/api/v1/values/string", buff, http.StatusOK)
+
+	buff, _ = json.Marshal(10)
+	response := executeRequest(t, "PUT", "/api/v1/expire/string", buff, http.StatusOK)
+
+	var result map[string]bool
+	json.Unmarshal(response.Body.Bytes(), &result)
+	assertEqual(t, true, result["value"])
+}
+
+func executeRequest(t *testing.T, method string, url string, buffer []byte, expectedCode int) *httptest.ResponseRecorder {
+
+	req, _ := http.NewRequest(method, url, bytes.NewBuffer(buffer))
 	resp := httptest.NewRecorder()
 	a.Router.ServeHTTP(resp, req)
+	assertEqual(t, expectedCode, resp.Code)
 
 	return resp
 }
 
-func checkResponseCode(t *testing.T, expected, actual int) {
-	if expected != actual {
-		t.Errorf("Expected response code %d. Actual %d\n", expected, actual)
+func assertEqual(t *testing.T, expected interface{}, actual interface{}) {
+
+	if expected == actual {
+		return
 	}
+
+	t.Fatalf("Expected: '%v'. Actual: '%v'", expected, actual)
 }

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"database/sql"
-
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
@@ -12,7 +10,6 @@ import (
 
 type App struct {
 	Router *mux.Router
-	DB     *sql.DB
 }
 
 var c *Cache
@@ -20,6 +17,7 @@ var c *Cache
 func (a *App) Initialize() {
 
 	c = newCache()
+	c.reload()
 
 	a.Router = mux.NewRouter()
 	a.initializeRoutes()
@@ -35,7 +33,10 @@ func (a *App) initializeRoutes() {
 	a.Router.HandleFunc("/api/v1/values/{key}", a.getValue).Methods("GET")
 	a.Router.HandleFunc("/api/v1/ttl/{key}", a.getTtl).Methods("GET")
 	a.Router.HandleFunc("/api/v1/values/{key}", a.putValue).Methods("PUT")
+	a.Router.HandleFunc("/api/v1/expire/{key}", a.expire).Methods("PUT")
 	a.Router.HandleFunc("/api/v1/values/{key}", a.deleteValue).Methods("DELETE")
+	a.Router.HandleFunc("/api/v1/persist", a.persist).Methods("POST")
+	a.Router.HandleFunc("/api/v1/reload", a.reload).Methods("POST")
 }
 
 func (a *App) getValue(w http.ResponseWriter, r *http.Request) {
@@ -118,6 +119,23 @@ func (a *App) putValue(w http.ResponseWriter, r *http.Request) {
 	respondWithValue(w, http.StatusOK, result)
 }
 
+func (a *App) expire(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	key := vars["key"]
+
+	var expire int
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&expire); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+	defer r.Body.Close()
+
+	result := c.expire(key, expire)
+
+	respondWithValue(w, http.StatusOK, result)
+}
+
 //get list of cache keys
 func (a *App) getKeys(w http.ResponseWriter, r *http.Request) {
 
@@ -137,17 +155,30 @@ func (a *App) deleteValue(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//get ttl of cache value
+func (a *App) persist(w http.ResponseWriter, r *http.Request) {
+	err := c.persist()
+	if err == nil {
+		respondWithJSON(w, http.StatusOK, "Cache Data persisted")
+	} else {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+	}
+}
+
+func (a *App) reload(w http.ResponseWriter, r *http.Request) {
+	err := c.reload()
+	if err == nil {
+		respondWithJSON(w, http.StatusOK, "Cache Data reloaded")
+	} else {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+	}
+}
+
+//get Ttl of cache value
 func (a *App) getTtl(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	key := vars["key"]
 
-	ttl, ok := c.getTtl(key)
-	if ok == false {
-		respondWithError(w, http.StatusNotFound, "Cache item not found")
-	} else {
-		respondWithValue(w, http.StatusOK, ttl)
-	}
+	respondWithValue(w, http.StatusOK, c.getTtl(key))
 }
 
 func respondWithError(w http.ResponseWriter, code int, message string) {
