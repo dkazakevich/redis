@@ -70,15 +70,15 @@ func (c *Cache) put(key string, value interface{}, expire int) {
 	//fmt.Printf("Put `%v` key with '%v' value\n", key, value)
 }
 
-func (c *Cache) expire(key string, expire int) bool {
+func (c *Cache) expire(key string, expire uint) bool {
 	c.Lock()
 	//delete old Ttl if exists
 	delete(c.Ttl, key)
 
-	value := c.Data[key]
+	_, ok := c.Data[key]
 
 	result := false
-	if (expire > 0) && (value != nil) {
+	if (expire > 0) && (ok == true) {
 		c.Ttl[key] = time.Now().Add(time.Second*time.Duration(expire))
 		c.checkTtl()
 		result = true

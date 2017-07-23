@@ -53,8 +53,8 @@ func (a *App) getValue(w http.ResponseWriter, r *http.Request) {
 	} else {
 		result = value;
 		//get i item from list cache value
-		if posStr := r.FormValue("pos"); posStr != "" {
-			pos, err := strconv.Atoi(posStr)
+		if listIndex := r.FormValue("listIndex"); listIndex != "" {
+			index, err := strconv.Atoi(listIndex)
 			if err != nil {
 				respondWithError(w, http.StatusBadRequest, "Invalid `pos` param. Number required")
 				return
@@ -64,12 +64,12 @@ func (a *App) getValue(w http.ResponseWriter, r *http.Request) {
 					respondWithError(w, http.StatusBadRequest, "Indicated value is not list")
 					return
 				} else {
-					result = v[pos]
+					result = v[index]
 				}
 			}
 		} else {
 			//get item by key from dict cache value
-			if dictKey := r.FormValue("key"); dictKey != "" {
+			if dictKey := r.FormValue("dictKey"); dictKey != "" {
 				v, ok := value.(map[string]interface{})
 				if ok == false {
 					respondWithError(w, http.StatusBadRequest, "Indicated value is not dictionary")
@@ -97,7 +97,7 @@ func (a *App) putValue(w http.ResponseWriter, r *http.Request) {
 	var value interface{}
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&value); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		respondWithError(w, http.StatusBadRequest, "Invalid payload request")
 		return
 	}
 	defer r.Body.Close()
@@ -108,7 +108,7 @@ func (a *App) putValue(w http.ResponseWriter, r *http.Request) {
 		var err error
 		expire, err = strconv.Atoi(exp)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid value expire")
+			respondWithError(w, http.StatusBadRequest, "Invalid expire value")
 			return
 		}
 	}
@@ -123,7 +123,7 @@ func (a *App) expire(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	key := vars["key"]
 
-	var expire int
+	var expire uint
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&expire); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
@@ -133,7 +133,24 @@ func (a *App) expire(w http.ResponseWriter, r *http.Request) {
 
 	result := c.expire(key, expire)
 
-	respondWithValue(w, http.StatusOK, result)
+	if result == false {
+		respondWithError(w, http.StatusNotFound, "Cache item not found")
+	} else {
+		respondWithMessage(w, http.StatusOK, "The timeout was set")
+	}
+}
+
+//get Ttl of cache value
+func (a *App) getTtl(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	key := vars["key"]
+
+	result := c.getTtl(key)
+	if result == -1 {
+		respondWithError(w, http.StatusNotFound, "Cache item not found")
+	} else {
+		respondWithValue(w, http.StatusOK, result)
+	}
 }
 
 //get list of cache keys
@@ -149,7 +166,7 @@ func (a *App) deleteValue(w http.ResponseWriter, r *http.Request) {
 	_, ok := c.get(key)
 	if ok == true {
 		c.remove(key)
-		respondWithValue(w, http.StatusOK, "Cache item deleted")
+		respondWithMessage(w, http.StatusOK, "Cache item deleted")
 	} else {
 		respondWithError(w, http.StatusNotFound, "Cache item not found")
 	}
@@ -158,7 +175,7 @@ func (a *App) deleteValue(w http.ResponseWriter, r *http.Request) {
 func (a *App) persist(w http.ResponseWriter, r *http.Request) {
 	err := c.persist()
 	if err == nil {
-		respondWithJSON(w, http.StatusOK, "Cache Data persisted")
+		respondWithMessage(w, http.StatusOK, "Cache Data persisted")
 	} else {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 	}
@@ -167,22 +184,18 @@ func (a *App) persist(w http.ResponseWriter, r *http.Request) {
 func (a *App) reload(w http.ResponseWriter, r *http.Request) {
 	err := c.reload()
 	if err == nil {
-		respondWithJSON(w, http.StatusOK, "Cache Data reloaded")
+		respondWithMessage(w, http.StatusOK, "Cache Data reloaded")
 	} else {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 	}
 }
 
-//get Ttl of cache value
-func (a *App) getTtl(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	key := vars["key"]
-
-	respondWithValue(w, http.StatusOK, c.getTtl(key))
-}
-
 func respondWithError(w http.ResponseWriter, code int, message string) {
 	respondWithJSON(w, code, map[string]string{"error": message})
+}
+
+func respondWithMessage(w http.ResponseWriter, code int, message string) {
+	respondWithJSON(w, code, map[string]string{"message": message})
 }
 
 func respondWithValue(w http.ResponseWriter, code int, value interface{}) {
