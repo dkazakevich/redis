@@ -8,11 +8,14 @@ import (
 	"io/ioutil"
 )
 
+//file name for persist data
 const CacheDataFileName = "cacheData.json"
 
 type Cache struct {
 	sync.RWMutex
+	//stores key-value pair data
 	Data  map[string]interface{} `json:"data"`
+	//stores key and expire time information
 	Ttl   map[string]time.Time  `json:"ttl"`
 	timer *time.Timer
 }
@@ -21,6 +24,7 @@ func newCache() *Cache {
 	return &Cache{Data: make(map[string]interface{}), Ttl: make(map[string]time.Time)}
 }
 
+//persist cache data to disk
 func (c *Cache) persist() error {
 	c.RLock()
 	jsonData, err := json.Marshal(c)
@@ -32,6 +36,7 @@ func (c *Cache) persist() error {
 	return err
 }
 
+//reload data from disk to cache
 func (c *Cache) reload() error {
 	c.Lock()
 	jsonData, err := ioutil.ReadFile(CacheDataFileName)
@@ -46,6 +51,7 @@ func (c *Cache) reload() error {
 	return err
 }
 
+//get cache value by key
 func (c *Cache) get(key string) (interface{}, bool) {
 	c.RLock()
 	value, ok := c.Data[key]
@@ -54,6 +60,7 @@ func (c *Cache) get(key string) (interface{}, bool) {
 	return value, ok
 }
 
+//put key-value pair into the cache
 func (c *Cache) put(key string, value interface{}, expire int) {
 	c.Lock()
 	//delete old Ttl if exists
@@ -66,10 +73,9 @@ func (c *Cache) put(key string, value interface{}, expire int) {
 		c.checkTtl()
 	}
 	c.Unlock()
-
-	//fmt.Printf("Put `%v` key with '%v' value\n", key, value)
 }
 
+//set a timeout on key in seconds
 func (c *Cache) expire(key string, expire uint) bool {
 	c.Lock()
 	//delete old Ttl if exists
@@ -88,6 +94,7 @@ func (c *Cache) expire(key string, expire uint) bool {
 	return result
 }
 
+//remove key-value pair from the cache
 func (c *Cache) remove(key string) {
 	c.Lock()
 	delete(c.Data, key)
@@ -95,6 +102,7 @@ func (c *Cache) remove(key string) {
 	c.Unlock()
 }
 
+//get list of cache keys
 func (c *Cache) getKeys() []string {
 	c.RLock()
 	keys := make([]string, 0, len(c.Data))
@@ -106,6 +114,8 @@ func (c *Cache) getKeys() []string {
 	return keys
 }
 
+//returns the remaining time to live of a key that has a timeout
+//returns -1 for a key that hasn't a timeout
 func (c *Cache) getTtl(key string) int {
 	c.RLock()
 	value, ok := c.Ttl[key]
@@ -119,7 +129,7 @@ func (c *Cache) getTtl(key string) int {
 	return ttlValue
 }
 
-//check all cache values with Ttl, remove expired, find minimum Ttl and set timer for it
+//check all cache values with ttl, remove expired, find minimum ttl and set timer for it
 func (c *Cache) checkTtl() {
 	if c.timer != nil {
 		//stop the current timer
@@ -130,14 +140,11 @@ func (c *Cache) checkTtl() {
 	for key, expire := range c.Ttl {
 		ttlValue := time.Until(expire)
 		if ttlValue > 0 {
-			if minTtl < 0 {
-				minTtl = ttlValue
-			}
-			if ttlValue < minTtl {
+			if (minTtl < 0) || (ttlValue < minTtl) {
 				minTtl = ttlValue
 			}
 		} else {
-			//delete from Ttl with current lock
+			//delete expired key-value pair with current lock
 			delete(c.Ttl, key)
 			delete(c.Data, key)
 			fmt.Printf("`%v` removed\n", key)
@@ -145,6 +152,7 @@ func (c *Cache) checkTtl() {
 	}
 
 	if minTtl > 0 {
+		//reset timer for the minTtl
 		if c.timer == nil {
 			c.timer = time.NewTimer(minTtl)
 		} else {

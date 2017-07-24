@@ -4,5 +4,6 @@ func main() {
 	a := App{}
 	a.Initialize()
 
-	a.Run(":8080")
+	//start redis server
+	a.Run(":" + serverPort)
 }

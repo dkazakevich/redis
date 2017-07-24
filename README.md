@@ -1,6 +1,6 @@
 # Redis-like in-memory cache
 
-##Installation
+##Installation and upgrade
 
 ```
     # Use 'go get' to install or upgrade (-u) the redis package
@@ -87,7 +87,7 @@ _**Examples**_:
 ```
 Request: curl -v -X GET http://localhost:8080/api/v1/keys
 Response code: 200
-Response body: {"keys":["planets","cars"]}
+Response body: {"value":["planets","cars"]}
 ```
 
 ###Delete value by keys
