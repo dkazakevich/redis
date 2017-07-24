@@ -1,6 +1,6 @@
 # Redis-like in-memory cache
 
-##Installation and upgrade
+## Installation and upgrade
 
 ```
     # Use 'go get' to install or upgrade (-u) the redis package
@@ -10,15 +10,15 @@
     go test github.com/dkazakevich/redis
     
     # Run the redis server
-    $GOPATH/bin/redis
+    $GOPATH/bin/redis ($USERPROFILE/go/bin/redis)
     
     # Run the redis server in background
     nohup $GOPATH/bin/redis &
 ```
 
-##HTTP Rest Api description
+## HTTP Rest Api description
 
-###Put key-value pare into the cache
+### Put key-value pare into the cache
 ```
 PUT /api/v1/values/{key}
 ```
@@ -29,20 +29,20 @@ PUT /api/v1/values/{key}
  
  _**Examples**_:
 ```
-Request: curl -v -X PUT -H 'content-type: application/json' -d '"June"' http://localhost:8080/api/v1/values/sixthMonth?expire=20
+Request: curl -X PUT -H 'content-type: application/json' -d '"June"' http://localhost:8080/api/v1/values/sixthMonth?expire=20
 Response code: 200
 Response body: {"value":"June"}
 
-Request: curl -v -X PUT -H 'content-type: application/json' -d '{"planet1":"Mercury", "planet2":"Venus", "planet3":"Earth"}' http://localhost:8080/api/v1/values/planets
+Request: curl -X PUT -H 'content-type: application/json' -d '{"planet1":"Mercury", "planet2":"Venus", "planet3":"Earth"}' http://localhost:8080/api/v1/values/planets
 Response code: 200
 Response body: {"value":{"planet1":"Mercury","planet2":"Venus","planet3":"Earth"}}
             
-Request: curl -v -X PUT -H 'content-type: application/json' -d '["Toyota","Opel","Ford"]' http://localhost:8080/api/v1/values/cars
+Request: curl -X PUT -H 'content-type: application/json' -d '["Toyota","Opel","Ford"]' http://localhost:8080/api/v1/values/cars
 Response code: 200
 Response body: {"value":["Toyota","Opel","Ford"]}
 ```
 
-###Get value by keys
+### Get value by keys
 ```
 GET /api/v1/values/{key}
 ```
@@ -61,52 +61,52 @@ GET /api/v1/values/{key}
  
  _**Examples**_:
 ```
-Request: curl -v -X GET http://localhost:8080/api/v1/values/planets
+Request: curl -X GET http://localhost:8080/api/v1/values/planets
 Response code: 200
 Response body: {"value":{"planet1":"Mercury","planet2":"Venus","planet3":"Earth"}}
 
-Request: curl -v -X GET http://localhost:8080/api/v1/values/cars?listIndex=1
+Request: curl -X GET http://localhost:8080/api/v1/values/cars?listIndex=1
 Response code: 200
 Response body: {"value":"Opel"}
 
-Request: curl -v -X GET http://localhost:8080/api/v1/values/planets?dictKey=planet1
+Request: curl -X GET http://localhost:8080/api/v1/values/planets?dictKey=planet1
 Response code: 200
 Response body: {"value":"Mercury"}
 
-Request: curl -v -X GET http://localhost:8080/api/v1/values/nonExistent
+Request: curl -X GET http://localhost:8080/api/v1/values/nonExistent
 Response code: 404
 Response body: {"error":"Cache item not found"}
 ```
 
-###Get a list of available keys
+### Get a list of available keys
 ```
 GET /api/v1/keys
 ```
 
 _**Examples**_:
 ```
-Request: curl -v -X GET http://localhost:8080/api/v1/keys
+Request: curl -X GET http://localhost:8080/api/v1/keys
 Response code: 200
 Response body: {"value":["planets","cars"]}
 ```
 
-###Delete value by keys
+### Delete value by keys
 ```
 DELETE /api/v1/values/{key}
 ```
 
  _**Examples**_:
 ```
-Request: curl -v -X DELETE http://localhost:8080/api/v1/values/planets
+Request: curl -X DELETE http://localhost:8080/api/v1/values/planets
 Response code: 200
 Response body: {"message":"Cache item deleted"}
 
-Request: curl -v -X DELETE http://localhost:8080/api/v1/values/nonExistent
+Request: curl -X DELETE http://localhost:8080/api/v1/values/nonExistent
 Response code: 404
 Response body: {"error":"Cache item not found"}
 ```
 
-###Set a timeout in seconds on key
+### Set a timeout in seconds on key
 ```
 PUT /api/v1/expire/{key}
 ```
@@ -117,16 +117,16 @@ PUT /api/v1/expire/{key}
  
  _**Examples**_:
 ```
-Request: curl -v -X PUT -H 'content-type: application/json' -d 10 http://localhost:8080/api/v1/expire/nonExistent
+Request: curl -X PUT -H 'content-type: application/json' -d 10 http://localhost:8080/api/v1/expire/nonExistent
 Response code: 404
 Response body: {"error":"Cache item not found"}
 
-Request: curl -v -X PUT -H 'content-type: application/json' -d 10 http://localhost:8080/api/v1/expire/cars
+Request: curl -X PUT -H 'content-type: application/json' -d 10 http://localhost:8080/api/v1/expire/cars
 Response code: 200
 Response body: {"message":"The timeout was set"}
 ```
 
-###Get the remaining time to live in seconds of a key that has a timeout
+### Get the remaining time to live in seconds of a key that has a timeout
 ```
 GET /api/v1/ttl/{key}
 ```
@@ -138,16 +138,16 @@ GET /api/v1/ttl/{key}
    
  _**Examples**_:
 ```
-Request: curl -v -X GET http://localhost:8080/api/v1/ttl/sixthMonth
+Request: curl -X GET http://localhost:8080/api/v1/ttl/sixthMonth
 Response code: 200
 Response body: {"value":11}
 
-Request: curl -v -X GET http://localhost:8080/api/v1/ttl/nonExistent
+Request: curl -X GET http://localhost:8080/api/v1/ttl/nonExistent
 Response code: 404
 Response body: {"error":"Cache item not found"}
 ```
 
-###Persist cache data to disk
+### Persist cache data
 ```
 POST /api/v1/persist
 ```
@@ -159,12 +159,12 @@ POST /api/v1/persist
  
  _**Examples**_:
 ```
-Request: curl -v -X POST http://localhost:8080/api/v1/persist
+Request: curl -X POST http://localhost:8080/api/v1/persist
 Response code: 200
 Response body: {"message":"Cache Data persisted"}
 ```
 
-###Reload cache data from disk
+### Reload persisted cache data
 ```
 POST /api/v1/reload
 ```
@@ -176,7 +176,7 @@ POST /api/v1/reload
  
  _**Examples**_:
 ```
-Request: curl -v -X POST http://localhost:8080/api/v1/reload
+Request: curl -X POST http://localhost:8080/api/v1/reload
 Response code: 200
 Response body: {"message":"Cache Data reloaded"}
 ```
