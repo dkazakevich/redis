@@ -16,8 +16,8 @@
     nohup $GOPATH/bin/redis &
 ```
 
-By default the server runs on the `8080` port number. Do the following steps to run on another port number:
-1. Go to the `$GOPATH/bin/redis` directory
+By default the server port number is `8080`. Do the following steps to run the server on another port number:
+1. Go to the `$GOPATH/bin` directory
 1. Create the `conf.json` file with the following content and indicate required port number:
 ```
 {
