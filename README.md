@@ -16,6 +16,15 @@
     nohup $GOPATH/bin/redis &
 ```
 
+By default the server runs on the `8080` port number. Do the following steps to run on another port number:
+1. Go to the `$GOPATH/bin/redis` directory
+1. Create the `conf.json` file with the following content and indicate required port number:
+```
+{
+  "serverPort": "8081"
+}
+```
+
 ## HTTP Rest Api description
 
 ### Put key-value pare into the cache
