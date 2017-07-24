@@ -153,7 +153,6 @@ func (a *App) expire(w http.ResponseWriter, r *http.Request) {
 }
 
 //returns the remaining time to live of a key that has a timeout
-//returns -1 for a key that hasn't a timeout
 func (a *App) getTtl(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	key := vars[keyParam]
