@@ -15,7 +15,7 @@ func main() {
 	a.Initialize()
 
 	configuration := Configuration{}
-	jsonData, err := ioutil.ReadFile("conf.json")
+	jsonData, err := ioutil.ReadFile(configFile)
 	if err == nil {
 		err = json.Unmarshal(jsonData, &configuration)
 	}

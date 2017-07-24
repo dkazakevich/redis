@@ -1,6 +1,7 @@
 package main
 
 const (
+	configFile = "conf.json"
 	serverPort = "8080"
 
 	baseUrl = "/api/v1/"
