@@ -18,19 +18,15 @@ func main() {
 	jsonData, err := ioutil.ReadFile(configFile)
 	if err == nil {
 		err = json.Unmarshal(jsonData, &configuration)
+		fmt.Println("Configuration data loaded from file.")
+	} else {
+		fmt.Println("Can't load app configuration file: ", err)
 	}
 
-	if err != nil {
-		fmt.Println("Can't load a configuration file: ", err)
-	}
-
-	port := serverPort
+	port := defaultServerPort
 	if configuration.ServerPort != "" {
 		port = configuration.ServerPort
 	}
-
 	fmt.Printf("Running server on the %v port", port)
-
-	//start redis server
-	a.Run(":" + port)
+	a.Run(":" + port)	//start redis server
 }

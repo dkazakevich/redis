@@ -2,9 +2,12 @@ package main
 
 const (
 	configFile = "conf.json"
-	serverPort = "8080"
+	defaultServerPort = "8080"
 
 	baseUrl = "/api/v1/"
+
+	//file name for persist data
+	cacheDataFileName = "cacheData.json"
 
 	itemNotFoundMsg = "Cache item not found"
 	invalidIndexParamMsg = "Invalid `listIndex` param. Number required"

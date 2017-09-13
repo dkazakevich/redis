@@ -8,160 +8,178 @@ import (
 	"io/ioutil"
 )
 
-//file name for persist data
-const CacheDataFileName = "cacheData.json"
-
 type Cache struct {
+	Data  Data
+	timer timer
+	dataFileName string
+}
+
+type Data struct {
 	sync.RWMutex
-	//stores key-value pair data
-	Data  map[string]interface{} `json:"data"`
-	//stores key and expire time information
-	Ttl   map[string]time.Time  `json:"ttl"`
+	Map map[string]interface{} `json:"map"` //stores key-value pair data
+	Ttl map[string]time.Time   `json:"ttl"` //stores key and expire time information
+}
+
+type timer struct {
+	sync.RWMutex
 	timer *time.Timer
 }
 
-func newCache() *Cache {
-	return &Cache{Data: make(map[string]interface{}), Ttl: make(map[string]time.Time)}
+func NewCache(dataFileName ...string) *Cache {
+	cache := &Cache{Data: Data{Map: make(map[string]interface{}), Ttl: make(map[string]time.Time)}}
+	if len(dataFileName) > 0 {
+		cache.dataFileName = dataFileName[0]
+	} else {
+		cache.dataFileName = cacheDataFileName;
+	}
+	return cache
 }
 
 //persist cache data to disk
 func (c *Cache) persist() error {
-	c.RLock()
+	c.Data.RLock()
 	jsonData, err := json.Marshal(c)
-	if err == nil {
-		err = ioutil.WriteFile(CacheDataFileName, jsonData, 0644)
-	}
-	c.RUnlock()
+	c.Data.RUnlock()
 
+	if err == nil {
+		err = ioutil.WriteFile(c.dataFileName, jsonData, 0644)
+	}
 	return err
 }
 
 //reload data from disk to cache
 func (c *Cache) reload() error {
-	c.Lock()
-	jsonData, err := ioutil.ReadFile(CacheDataFileName)
+	jsonData, err := ioutil.ReadFile(c.dataFileName)
 	if err == nil {
+		c.Data.Lock()
 		err = json.Unmarshal(jsonData, &c)
+		c.Data.Unlock()
+
 		if err == nil {
-			c.checkTtl()
+			go c.checkTtl()
 		}
 	}
-	c.Unlock()
-
 	return err
+}
+
+//clear cache data
+func (c *Cache) clear() {
+	c.Data.RLock()
+	c.Data.Map = make(map[string]interface{})
+	for i := range c.Data.Map { delete(c.Data.Map, i) }
+	for i := range c.Data.Ttl { delete(c.Data.Ttl, i) }
+	c.Data.RUnlock()
+
+	c.timer.Lock()
+	if c.timer.timer != nil {
+		c.timer.timer.Stop()
+	}
+	c.timer.Unlock()
 }
 
 //get cache value by key
 func (c *Cache) get(key string) (interface{}, bool) {
-	c.RLock()
-	value, ok := c.Data[key]
-	c.RUnlock()
-
+	c.Data.RLock()
+	defer c.Data.RUnlock()
+	value, ok := c.Data.Map[key]
 	return value, ok
 }
 
 //put key-value pair into the cache
 func (c *Cache) put(key string, value interface{}, expire int) {
-	c.Lock()
-	//delete old Ttl if exists
-	delete(c.Ttl, key)
-
-	c.Data[key] = value
+	c.Data.Lock()
+	defer c.Data.Unlock()
+	delete(c.Data.Ttl, key) //delete old Ttl if exists
+	c.Data.Map[key] = value
 
 	if expire > 0 {
-		c.Ttl[key] = time.Now().Add(time.Second*time.Duration(expire))
-		c.checkTtl()
+		c.Data.Ttl[key] = time.Now().Add(time.Second * time.Duration(expire))
+		go c.checkTtl()
 	}
-	c.Unlock()
 }
 
-//set a timeout on key in seconds
-func (c *Cache) expire(key string, expire uint) bool {
-	c.Lock()
-	//delete old Ttl if exists
-	delete(c.Ttl, key)
-
-	_, ok := c.Data[key]
-
+//set app timeout on key in seconds
+func (c *Cache) expire(key string, expire int) bool {
 	result := false
-	if (expire > 0) && (ok == true) {
-		c.Ttl[key] = time.Now().Add(time.Second*time.Duration(expire))
-		c.checkTtl()
-		result = true
-	}
-	c.Unlock()
+	c.Data.Lock()
+	defer c.Data.Unlock()
 
+	delete(c.Data.Ttl, key) //delete old Ttl if exists
+	_, ok := c.Data.Map[key]
+
+	if (expire > 0) && (ok == true) {
+		c.Data.Ttl[key] = time.Now().Add(time.Second * time.Duration(expire))
+		result = true
+		go c.checkTtl()
+	}
 	return result
 }
 
 //remove key-value pair from the cache
 func (c *Cache) remove(key string) {
-	c.Lock()
-	delete(c.Data, key)
-	delete(c.Ttl, key)
-	c.Unlock()
+	c.Data.Lock()
+	defer c.Data.Unlock()
+	delete(c.Data.Map, key)
+	delete(c.Data.Ttl, key)
 }
 
 //get list of cache keys
 func (c *Cache) getKeys() []string {
-	c.RLock()
-	keys := make([]string, 0, len(c.Data))
-	for k := range c.Data {
+	c.Data.RLock()
+	defer c.Data.RUnlock()
+	keys := make([]string, 0, len(c.Data.Map))
+	for k := range c.Data.Map {
 		keys = append(keys, k)
 	}
-	c.RUnlock()
-
 	return keys
 }
 
-//returns the remaining time to live of a key that has a timeout
-//returns -1 for a key that hasn't a timeout
+//returns the remaining time to live of app key that has app timeout
+//returns -1 for app key that hasn't app timeout
 func (c *Cache) getTtl(key string) int {
-	c.RLock()
-	value, ok := c.Ttl[key]
-	c.RUnlock()
+	c.Data.RLock()
+	value, ok := c.Data.Ttl[key]
+	c.Data.RUnlock()
 
 	var ttlValue int = -1
 	if ok == true {
 		ttlValue = int(time.Until(value).Seconds())
 	}
-
 	return ttlValue
 }
 
 //check all cache values with ttl, remove expired, find minimum ttl and set timer for it
 func (c *Cache) checkTtl() {
-	if c.timer != nil {
-		//stop the current timer
-		c.timer.Stop()
-	}
-
-	var minTtl time.Duration = -1
-	for key, expire := range c.Ttl {
+	var minTtl time.Duration
+	c.Data.Lock()
+	for key, expire := range c.Data.Ttl {
 		ttlValue := time.Until(expire)
 		if ttlValue > 0 {
-			if (minTtl < 0) || (ttlValue < minTtl) {
+			if (minTtl == 0) || (ttlValue < minTtl) {
 				minTtl = ttlValue
 			}
 		} else {
 			//delete expired key-value pair with current lock
-			delete(c.Ttl, key)
-			delete(c.Data, key)
+			delete(c.Data.Ttl, key)
+			delete(c.Data.Map, key)
 			fmt.Printf("`%v` removed\n", key)
 		}
 	}
+	c.Data.Unlock()
 
 	if minTtl > 0 {
+		c.timer.Lock()
 		//reset timer for the minTtl
-		if c.timer == nil {
-			c.timer = time.NewTimer(minTtl)
+		if c.timer.timer == nil {
+			c.timer.timer = time.NewTimer(minTtl)
 		} else {
-			c.timer.Reset(minTtl)
+			c.timer.timer.Reset(minTtl)
 		}
-		fmt.Printf("Timer reset with `%v` duration\n", minTtl.Seconds())
+		c.timer.Unlock()
+		fmt.Printf("Timer reset with `%v`s duration\n", minTtl.Seconds())
 
 		go func() {
-			<-c.timer.C
+			<-c.timer.timer.C
 			c.checkTtl()
 		}()
 	}

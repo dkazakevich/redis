@@ -10,15 +10,12 @@ import (
 
 type App struct {
 	Router *mux.Router
+	Cache *Cache
 }
 
-var c *Cache
-
 func (a *App) Initialize() {
-
-	c = newCache()
-	//load stored cache data
-	c.reload()
+	a.Cache = NewCache()
+	a.Cache.reload() //load stored cache data
 
 	a.Router = mux.NewRouter()
 	a.initializeRoutes()
@@ -29,7 +26,6 @@ func (a *App) Run(addr string) {
 }
 
 func (a *App) initializeRoutes() {
-
 	a.Router.HandleFunc(baseUrl + "ping", a.ping).Methods(http.MethodGet)
 	a.Router.HandleFunc(baseUrl + "keys", a.getKeys).Methods(http.MethodGet)
 	a.Router.HandleFunc(baseUrl + "values/{key}", a.getValue).Methods(http.MethodGet)
@@ -42,7 +38,6 @@ func (a *App) initializeRoutes() {
 }
 
 func (a *App) ping(w http.ResponseWriter, r *http.Request) {
-
 	respondWithValue(w, http.StatusOK, "ping")
 }
 
@@ -53,8 +48,7 @@ func (a *App) getValue(w http.ResponseWriter, r *http.Request) {
 	key := vars[keyParam]
 
 	//get cache value
-	value, ok := c.get(key)
-
+	value, ok := a.Cache.get(key)
 	if ok == false {
 		respondWithError(w, http.StatusNotFound, itemNotFoundMsg)
 		return
@@ -95,15 +89,11 @@ func (a *App) getValue(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
 	respondWithValue(w, http.StatusOK, result)
 }
 
 //put key-value pair into the cache
 func (a *App) putValue(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	key := vars[keyParam]
-
 	//get value from the request body
 	var value interface{}
 	decoder := json.NewDecoder(r.Body)
@@ -124,18 +114,15 @@ func (a *App) putValue(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	c.put(key, value, expire)
-
-	result, _ := c.get(key)
+	key := mux.Vars(r)[keyParam]
+	a.Cache.put(key, value, expire)
+	result, _ := a.Cache.get(key)
 	respondWithValue(w, http.StatusOK, result)
 }
 
-//set a timeout on key in seconds
+//set app timeout on key in seconds
 func (a *App) expire(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	key := vars[keyParam]
-
-	var expire uint
+	var expire int
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&expire); err != nil {
 		respondWithError(w, http.StatusBadRequest, invalidPayloadRequestMsg)
@@ -143,8 +130,7 @@ func (a *App) expire(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	result := c.expire(key, expire)
-
+	result := a.Cache.expire(mux.Vars(r)[keyParam], expire)
 	if result == false {
 		respondWithError(w, http.StatusNotFound, itemNotFoundMsg)
 	} else {
@@ -152,12 +138,9 @@ func (a *App) expire(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//returns the remaining time to live of a key that has a timeout
+//returns the remaining time to live of app key that has app timeout
 func (a *App) getTtl(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	key := vars[keyParam]
-
-	result := c.getTtl(key)
+	result := a.Cache.getTtl(mux.Vars(r)[keyParam])
 	if result == -1 {
 		respondWithError(w, http.StatusNotFound, itemNotFoundMsg)
 	} else {
@@ -167,18 +150,15 @@ func (a *App) getTtl(w http.ResponseWriter, r *http.Request) {
 
 //get list of cache keys
 func (a *App) getKeys(w http.ResponseWriter, r *http.Request) {
-
-	respondWithJSON(w, http.StatusOK, map[string][]string{valueParam: c.getKeys()})
+	respondWithJSON(w, http.StatusOK, map[string][]string{valueParam: a.Cache.getKeys()})
 }
 
 //remove key-value pair from the cache
 func (a *App) remove(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	key := vars[keyParam]
-
-	_, ok := c.get(key)
+	key := mux.Vars(r)[keyParam]
+	_, ok := a.Cache.get(key)
 	if ok == true {
-		c.remove(key)
+		a.Cache.remove(key)
 		respondWithMessage(w, http.StatusOK, itemDeletedMsg)
 	} else {
 		respondWithError(w, http.StatusNotFound, itemNotFoundMsg)
@@ -187,7 +167,7 @@ func (a *App) remove(w http.ResponseWriter, r *http.Request) {
 
 //persist cache data
 func (a *App) persist(w http.ResponseWriter, r *http.Request) {
-	err := c.persist()
+	err := a.Cache.persist()
 	if err == nil {
 		respondWithMessage(w, http.StatusOK, dataPersistedMsg)
 	} else {
@@ -197,7 +177,7 @@ func (a *App) persist(w http.ResponseWriter, r *http.Request) {
 
 //reload persisted data
 func (a *App) reload(w http.ResponseWriter, r *http.Request) {
-	err := c.reload()
+	err := a.Cache.reload()
 	if err == nil {
 		respondWithMessage(w, http.StatusOK, dataReloadedMsg)
 	} else {
@@ -219,7 +199,6 @@ func respondWithValue(w http.ResponseWriter, code int, value interface{}) {
 
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	response, _ := json.Marshal(payload)
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	w.Write(response)

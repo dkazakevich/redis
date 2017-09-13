@@ -7,79 +7,82 @@ import (
 	"net/http/httptest"
 	"bytes"
 	"encoding/json"
+	"fmt"
 )
 
-var a App
+var app App
+
+var stringKey = "sixthMonth"
+var stringValue = "June"
+var tempStringKey = "tempString"
+var tempStringValue = "temp string value"
+var dictKey = "planets"
+var dictValue = map[string]interface{}{"planet1": "Mercury", "planet2": "Venus", "planet3": "Earth"}
+var listKey = "cars"
+var listValue = []interface{}{"Toyota", "Opel", "Ford"}
 
 func TestMain(m *testing.M) {
-
-	a = App{}
-	a.Initialize()
+	app = App{}
+	app.Initialize()
 	code := m.Run()
 	os.Exit(code)
 }
 
 func TestPutAndGetString(t *testing.T) {
+	buff, _ := json.Marshal(stringValue)
+	executeRequest(t, http.MethodPut, fmt.Sprintf("%vvalues/%v?expire=20", baseUrl, stringKey), buff,
+		http.StatusOK)
 
-	value := "June"
-	buff, _ := json.Marshal(value)
-	executeRequest(t, http.MethodPut, baseUrl + "values/sixthMonth?expire=20", buff, http.StatusOK)
-
-	response := executeRequest(t, http.MethodGet, baseUrl + "values/sixthMonth", nil, http.StatusOK)
+	response := executeRequest(t, http.MethodGet, fmt.Sprintf("%vvalues/%v", baseUrl, stringKey), nil,
+		http.StatusOK)
 	var result map[string]interface{}
 	json.Unmarshal(response.Body.Bytes(), &result)
-	assertEquals(t, value, result[valueParam])
+	assertEquals(t, stringValue, result[valueParam])
 }
 
 func TestPutAndGetDict(t *testing.T) {
+	buff, _ := json.Marshal(dictValue)
+	executeRequest(t, http.MethodPut, fmt.Sprintf("%vvalues/%v", baseUrl, dictKey), buff, http.StatusOK)
 
-	value := map[string]string{"planet1": "Mercury", "planet2": "Venus", "planet3": "Earth"}
-	buff, _ := json.Marshal(value)
-	executeRequest(t, http.MethodPut, baseUrl + "values/planets", buff, http.StatusOK)
-
-	response := executeRequest(t, http.MethodGet, baseUrl + "values/planets?dictKey=planet1", nil, http.StatusOK)
+	response := executeRequest(t, http.MethodGet, fmt.Sprintf("%vvalues/%v?dictKey=planet1", baseUrl, dictKey),
+		nil, http.StatusOK)
 	var result map[string]interface{}
 	json.Unmarshal(response.Body.Bytes(), &result)
 	assertEquals(t, "Mercury", result[valueParam])
 }
 
 func TestPutAndGetList(t *testing.T) {
+	buff, _ := json.Marshal(listValue)
+	executeRequest(t, http.MethodPut, fmt.Sprintf("%vvalues/%v", baseUrl, listKey), buff, http.StatusOK)
 
-	value := [3]string{"Toyota", "Opel", "Ford"}
-	buff, _ := json.Marshal(value)
-	executeRequest(t, http.MethodPut, baseUrl + "values/cars", buff, http.StatusOK)
-
-	response := executeRequest(t, http.MethodGet, baseUrl + "values/cars?listIndex=1", nil, http.StatusOK)
+	response := executeRequest(t, http.MethodGet, fmt.Sprintf("%vvalues/%v?listIndex=1", baseUrl, listKey),
+		nil, http.StatusOK)
 	var result map[string]interface{}
 	json.Unmarshal(response.Body.Bytes(), &result)
-	assertEquals(t, "Opel", result[valueParam])
+	assertEquals(t, listValue[1], result[valueParam])
 }
 
 func TestGetNonExistentItem(t *testing.T) {
-
 	executeRequest(t, http.MethodGet, baseUrl + "values/nonExistent", nil, http.StatusNotFound)
 }
 
 func TestKeys(t *testing.T) {
-
 	executeRequest(t, http.MethodGet, baseUrl + "keys", nil, http.StatusOK)
 }
 
 func TestDelete(t *testing.T) {
-
-	executeRequest(t, http.MethodDelete, baseUrl + "values/cars", nil, http.StatusOK)
-	executeRequest(t, http.MethodGet, baseUrl + "values/cars", nil, http.StatusNotFound)
+	executeRequest(t, http.MethodDelete, fmt.Sprintf("%vvalues/%v", baseUrl, listKey), nil, http.StatusOK)
+	executeRequest(t, http.MethodGet, fmt.Sprintf("%vvalues/%v", baseUrl, listKey), nil, http.StatusNotFound)
 }
 
 func TestExpireAndCheckTtl(t *testing.T) {
-
-	buff, _ := json.Marshal("temp string")
-	executeRequest(t, http.MethodPut, baseUrl + "values/tempString", buff, http.StatusOK)
+	buff, _ := json.Marshal(tempStringValue)
+	executeRequest(t, http.MethodPut, fmt.Sprintf("%vvalues/%v", baseUrl, tempStringKey), buff, http.StatusOK)
 
 	buff, _ = json.Marshal(10)
-	executeRequest(t, http.MethodPut, baseUrl + "expire/tempString", buff, http.StatusOK)
+	executeRequest(t, http.MethodPut, fmt.Sprintf("%vexpire/%v", baseUrl, tempStringKey), buff, http.StatusOK)
 
-	response := executeRequest(t, http.MethodGet, baseUrl + "ttl/tempString", nil, http.StatusOK)
+	response := executeRequest(t, http.MethodGet, fmt.Sprintf("%vttl/%v", baseUrl, tempStringKey), nil, http.StatusOK)
 	var result map[string]int
 	json.Unmarshal(response.Body.Bytes(), &result)
 	if result[valueParam] < 0 {
@@ -88,38 +91,30 @@ func TestExpireAndCheckTtl(t *testing.T) {
 }
 
 func TestNonExistentExpire(t *testing.T) {
-
 	buff, _ := json.Marshal(10)
 	executeRequest(t, http.MethodPut, baseUrl + "expire/nonExistent", buff, http.StatusNotFound)
 }
 
 func TestPersistItemTtl(t *testing.T) {
-
 	buff, _ := json.Marshal(10)
 	executeRequest(t, http.MethodGet, baseUrl + "ttl/planets", buff, http.StatusNotFound)
 }
 
 func TestNonExistentTtl(t *testing.T) {
-
 	buff, _ := json.Marshal(10)
 	executeRequest(t, http.MethodGet, baseUrl + "ttl/nonExistent", buff, http.StatusNotFound)
 }
 
 func executeRequest(t *testing.T, method string, url string, buffer []byte, expectedCode int) *httptest.ResponseRecorder {
-
 	req, _ := http.NewRequest(method, url, bytes.NewBuffer(buffer))
 	resp := httptest.NewRecorder()
-	a.Router.ServeHTTP(resp, req)
+	app.Router.ServeHTTP(resp, req)
 	assertEquals(t, expectedCode, resp.Code)
-
 	return resp
 }
 
 func assertEquals(t *testing.T, expected interface{}, actual interface{}) {
-
-	if expected == actual {
-		return
+	if expected != actual {
+		t.Fatalf("Expected: '%v'. Actual: '%v'", expected, actual)
 	}
-
-	t.Fatalf("Expected: '%v'. Actual: '%v'", expected, actual)
 }
