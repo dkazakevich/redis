@@ -43,11 +43,11 @@ func TestCacheDelete(t *testing.T) {
 }
 
 func TestCacheExpireAndCheckTtl(t *testing.T) {
-	cache.put(tempStringKey, tempStringValue, 2)
+	cache.put(tempStringKey, tempStringValue, -1)
 	cache.expire(tempStringKey, 2)
 	assertEquals(t, true, cache.getTtl(tempStringKey) > 0)
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 	assertEquals(t, -1, cache.getTtl(tempStringKey))
 	_, ok := cache.get(tempStringKey)
 	assertEquals(t, false, ok)
