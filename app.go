@@ -120,7 +120,7 @@ func (a *App) putValue(w http.ResponseWriter, r *http.Request) {
 	respondWithValue(w, http.StatusOK, result)
 }
 
-//set app timeout on key in seconds
+//set a timeout on key in seconds
 func (a *App) expire(w http.ResponseWriter, r *http.Request) {
 	var expire int
 	decoder := json.NewDecoder(r.Body)
@@ -138,7 +138,7 @@ func (a *App) expire(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//returns the remaining time to live of app key that has app timeout
+//returns the remaining time to live of a key that has a timeout
 func (a *App) getTtl(w http.ResponseWriter, r *http.Request) {
 	result := a.Cache.getTtl(mux.Vars(r)[keyParam])
 	if result == -1 {
