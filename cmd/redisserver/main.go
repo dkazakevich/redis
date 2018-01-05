@@ -4,17 +4,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"github.com/dkazakevich/redis/pkg/restserver"
 )
 
-type Configuration struct {
+type configuration struct {
 	ServerPort string `json:"serverPort"`
 }
 
-func main() {
-	a := App{}
-	a.Initialize()
+const (
+	configFile        = "conf.json"
+	defaultServerPort = "8080"
+)
 
-	configuration := Configuration{}
+func main() {
+	var rest restserver.RestServer
+	rest.Initialize()
+
+	configuration := configuration{}
 	jsonData, err := ioutil.ReadFile(configFile)
 	if err == nil {
 		err = json.Unmarshal(jsonData, &configuration)
@@ -28,5 +34,5 @@ func main() {
 		port = configuration.ServerPort
 	}
 	fmt.Printf("Running server on the %v port", port)
-	a.Run(":" + port)	//start redis server
+	rest.Run(port) //start redis server
 }

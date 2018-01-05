@@ -1,4 +1,4 @@
-package main
+package restserver
 
 import (
 	"os"
@@ -8,22 +8,27 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/dkazakevich/redis/internal/testutil"
 )
 
-var app App
+const (
+	stringKey 		= "sixthMonth"
+	stringValue 	= "June"
+	tempStringKey 	= "tempString"
+	tempStringValue = "temp string value"
+	dictKey 		= "planets"
+	listKey 		= "cars"
+)
 
-var stringKey = "sixthMonth"
-var stringValue = "June"
-var tempStringKey = "tempString"
-var tempStringValue = "temp string value"
-var dictKey = "planets"
-var dictValue = map[string]interface{}{"planet1": "Mercury", "planet2": "Venus", "planet3": "Earth"}
-var listKey = "cars"
-var listValue = []interface{}{"Toyota", "Opel", "Ford"}
+var (
+	rs RestServer
+
+	dictValue = map[string]interface{}{"planet1": "Mercury", "planet2": "Venus", "planet3": "Earth"}
+	listValue = []interface{}{"Toyota", "Opel", "Ford"}
+)
 
 func TestMain(m *testing.M) {
-	app = App{}
-	app.Initialize()
+	rs.Initialize()
 	code := m.Run()
 	os.Exit(code)
 }
@@ -37,7 +42,7 @@ func TestPutAndGetString(t *testing.T) {
 		http.StatusOK)
 	var result map[string]interface{}
 	json.Unmarshal(response.Body.Bytes(), &result)
-	assertEquals(t, stringValue, result[valueParam])
+	testutil.AssertEquals(t, stringValue, result[valueParam])
 }
 
 func TestPutAndGetDict(t *testing.T) {
@@ -48,7 +53,7 @@ func TestPutAndGetDict(t *testing.T) {
 		nil, http.StatusOK)
 	var result map[string]interface{}
 	json.Unmarshal(response.Body.Bytes(), &result)
-	assertEquals(t, "Mercury", result[valueParam])
+	testutil.AssertEquals(t, "Mercury", result[valueParam])
 }
 
 func TestPutAndGetList(t *testing.T) {
@@ -59,7 +64,7 @@ func TestPutAndGetList(t *testing.T) {
 		nil, http.StatusOK)
 	var result map[string]interface{}
 	json.Unmarshal(response.Body.Bytes(), &result)
-	assertEquals(t, listValue[1], result[valueParam])
+	testutil.AssertEquals(t, listValue[1], result[valueParam])
 }
 
 func TestGetNonExistentItem(t *testing.T) {
@@ -97,7 +102,10 @@ func TestNonExistentExpire(t *testing.T) {
 
 func TestPersistItemTtl(t *testing.T) {
 	buff, _ := json.Marshal(10)
-	executeRequest(t, http.MethodGet, baseUrl + "ttl/planets", buff, http.StatusNotFound)
+	response := executeRequest(t, http.MethodGet, baseUrl + "ttl/" + dictKey, buff, http.StatusOK)
+	var result map[string]int
+	json.Unmarshal(response.Body.Bytes(), &result)
+	testutil.AssertEquals(t, -1, result[valueParam])
 }
 
 func TestNonExistentTtl(t *testing.T) {
@@ -108,13 +116,7 @@ func TestNonExistentTtl(t *testing.T) {
 func executeRequest(t *testing.T, method string, url string, buffer []byte, expectedCode int) *httptest.ResponseRecorder {
 	req, _ := http.NewRequest(method, url, bytes.NewBuffer(buffer))
 	resp := httptest.NewRecorder()
-	app.Router.ServeHTTP(resp, req)
-	assertEquals(t, expectedCode, resp.Code)
+	rs.router.ServeHTTP(resp, req)
+	testutil.AssertEquals(t, expectedCode, resp.Code)
 	return resp
-}
-
-func assertEquals(t *testing.T, expected interface{}, actual interface{}) {
-	if expected != actual {
-		t.Fatalf("Expected: '%v'. Actual: '%v'", expected, actual)
-	}
 }

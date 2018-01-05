@@ -7,13 +7,14 @@
     go get -u github.com/dkazakevich/redis
     
     # Use `go test` to run tests
-    go test github.com/dkazakevich/redis
+    go test github.com/dkazakevich/redis/pkg/cache
+    go test github.com/dkazakevich/redis/pkg/restserver
     
     # Run the redis server
-    $GOPATH/bin/redis ($USERPROFILE/go/bin/redis)
+    $GOPATH/bin/redis ($USERPROFILE/go/bin/redisserver)
     
     # Run the redis server in background
-    nohup $GOPATH/bin/redis &
+    nohup $GOPATH/bin/redisserver &
 ```
 
 By default the server port number is `8080`. Do the following steps to run the server on another port number:
@@ -143,7 +144,8 @@ GET /api/v1/ttl/{key}
  Return code | Return value                      | Description
 -------------|-----------------------------------|------------------
  200         | {"value":11}                      | TTL in seconds
- 404         | {"error":"Cache item not found"}  | if the key does not exist or has no associated expire
+ 200         | {"value":-1}                      | if the key doesn't have expiration
+ 404         | {"error":"Cache item not found"}  | if the key doesn't exist or has no associated expire
    
  _**Examples**_:
 ```

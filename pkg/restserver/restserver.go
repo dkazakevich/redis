@@ -1,4 +1,4 @@
-package main
+package restserver
 
 import (
 	"github.com/gorilla/mux"
@@ -6,50 +6,77 @@ import (
 	"net/http"
 	"encoding/json"
 	"strconv"
+	"time"
+	"github.com/dkazakevich/redis/pkg/cache"
 )
 
-type App struct {
-	Router *mux.Router
-	Cache *Cache
+type RestServer struct {
+	router *mux.Router
+	cache  *cache.Cache
 }
 
-func (a *App) Initialize() {
-	a.Cache = NewCache()
-	a.Cache.reload() //load stored cache data
+const (
+	baseUrl = "/api/v1/"
 
-	a.Router = mux.NewRouter()
-	a.initializeRoutes()
+	itemNotFoundMsg          = "Cache item not found"
+	invalidIndexParamMsg     = "Invalid `listIndex` param. Number required"
+	valueNotListMsg          = "Indicated value is not list"
+	valueNotDictMsg          = "Indicated value is not dictionary"
+	dictItemNotFoundMsg      = "Dictionary item not found"
+	invalidPayloadRequestMsg = "Invalid payload request"
+	invalidExpireValueMsg    = "Invalid expire value"
+
+	timeoutSetMsg    = "The timeout was set"
+	itemDeletedMsg   = "Cache item deleted"
+	dataPersistedMsg = "Cache Data persisted"
+	dataReloadedMsg  = "Cache Data reloaded"
+
+	keyParam       = "key"
+	dictKeyParam   = "dictKey"
+	valueParam     = "value"
+	expireParam    = "expire"
+	listIndexParam = "listIndex"
+	errorParam     = "error"
+	messageParam   = "message"
+)
+
+func (rs *RestServer) Initialize() {
+	rs.cache = cache.NewCache(10, time.Second, 10)
+	rs.cache.Reload() //load stored cache data
+
+	rs.router = mux.NewRouter()
+	rs.initializeRoutes()
 }
 
-func (a *App) Run(addr string) {
-	log.Fatal(http.ListenAndServe(addr, a.Router))
+func (rs *RestServer) Run(port string) {
+	log.Fatal(http.ListenAndServe(":"+port, rs.router))
 }
 
-func (a *App) initializeRoutes() {
-	a.Router.HandleFunc(baseUrl + "ping", a.ping).Methods(http.MethodGet)
-	a.Router.HandleFunc(baseUrl + "keys", a.getKeys).Methods(http.MethodGet)
-	a.Router.HandleFunc(baseUrl + "values/{key}", a.getValue).Methods(http.MethodGet)
-	a.Router.HandleFunc(baseUrl + "ttl/{key}", a.getTtl).Methods(http.MethodGet)
-	a.Router.HandleFunc(baseUrl + "values/{key}", a.putValue).Methods(http.MethodPut)
-	a.Router.HandleFunc(baseUrl + "expire/{key}", a.expire).Methods(http.MethodPut)
-	a.Router.HandleFunc(baseUrl + "values/{key}", a.remove).Methods(http.MethodDelete)
-	a.Router.HandleFunc(baseUrl + "persist", a.persist).Methods(http.MethodPost)
-	a.Router.HandleFunc(baseUrl + "reload", a.reload).Methods(http.MethodPost)
+func (rs *RestServer) initializeRoutes() {
+	rs.router.HandleFunc(baseUrl+"ping", rs.ping).Methods(http.MethodGet)
+	rs.router.HandleFunc(baseUrl+"keys", rs.getKeys).Methods(http.MethodGet)
+	rs.router.HandleFunc(baseUrl+"values/{key}", rs.getValue).Methods(http.MethodGet)
+	rs.router.HandleFunc(baseUrl+"ttl/{key}", rs.getTtl).Methods(http.MethodGet)
+	rs.router.HandleFunc(baseUrl+"values/{key}", rs.putValue).Methods(http.MethodPut)
+	rs.router.HandleFunc(baseUrl+"expire/{key}", rs.expire).Methods(http.MethodPut)
+	rs.router.HandleFunc(baseUrl+"values/{key}", rs.remove).Methods(http.MethodDelete)
+	rs.router.HandleFunc(baseUrl+"persist", rs.persist).Methods(http.MethodPost)
+	rs.router.HandleFunc(baseUrl+"reload", rs.reload).Methods(http.MethodPost)
 }
 
-func (a *App) ping(w http.ResponseWriter, r *http.Request) {
+func (rs *RestServer) ping(w http.ResponseWriter, r *http.Request) {
 	respondWithValue(w, http.StatusOK, "ping")
 }
 
 //get cache value by key
-func (a *App) getValue(w http.ResponseWriter, r *http.Request) {
+func (rs *RestServer) getValue(w http.ResponseWriter, r *http.Request) {
 	var result interface{}
 	vars := mux.Vars(r)
 	key := vars[keyParam]
 
 	//get cache value
-	value, ok := a.Cache.get(key)
-	if ok == false {
+	value, exists := rs.cache.Get(key)
+	if exists == false {
 		respondWithError(w, http.StatusNotFound, itemNotFoundMsg)
 		return
 	} else {
@@ -62,8 +89,8 @@ func (a *App) getValue(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, invalidIndexParamMsg)
 				return
 			} else {
-				v, ok := value.([]interface{})
-				if ok == false {
+				v, exists := value.([]interface{})
+				if exists == false {
 					respondWithError(w, http.StatusBadRequest, valueNotListMsg)
 					return
 				} else {
@@ -73,13 +100,13 @@ func (a *App) getValue(w http.ResponseWriter, r *http.Request) {
 		} else {
 			//get item by key from dict cache value
 			if dictKey := r.FormValue(dictKeyParam); dictKey != "" {
-				v, ok := value.(map[string]interface{})
-				if ok == false {
+				v, exists := value.(map[string]interface{})
+				if exists == false {
 					respondWithError(w, http.StatusBadRequest, valueNotDictMsg)
 					return
 				} else {
-					dictValue, ok := v[dictKey]
-					if ok == false {
+					dictValue, exists := v[dictKey]
+					if exists == false {
 						respondWithError(w, http.StatusNotFound, dictItemNotFoundMsg)
 						return
 					} else {
@@ -93,7 +120,7 @@ func (a *App) getValue(w http.ResponseWriter, r *http.Request) {
 }
 
 //put key-value pair into the cache
-func (a *App) putValue(w http.ResponseWriter, r *http.Request) {
+func (rs *RestServer) putValue(w http.ResponseWriter, r *http.Request) {
 	//get value from the request body
 	var value interface{}
 	decoder := json.NewDecoder(r.Body)
@@ -115,13 +142,13 @@ func (a *App) putValue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := mux.Vars(r)[keyParam]
-	a.Cache.put(key, value, expire)
-	result, _ := a.Cache.get(key)
+	rs.cache.Put(key, value, expire)
+	result, _ := rs.cache.Get(key)
 	respondWithValue(w, http.StatusOK, result)
 }
 
 //set a timeout on key in seconds
-func (a *App) expire(w http.ResponseWriter, r *http.Request) {
+func (rs *RestServer) expire(w http.ResponseWriter, r *http.Request) {
 	var expire int
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&expire); err != nil {
@@ -130,7 +157,7 @@ func (a *App) expire(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	result := a.Cache.expire(mux.Vars(r)[keyParam], expire)
+	result := rs.cache.Expire(mux.Vars(r)[keyParam], expire)
 	if result == false {
 		respondWithError(w, http.StatusNotFound, itemNotFoundMsg)
 	} else {
@@ -139,9 +166,9 @@ func (a *App) expire(w http.ResponseWriter, r *http.Request) {
 }
 
 //returns the remaining time to live of a key that has a timeout
-func (a *App) getTtl(w http.ResponseWriter, r *http.Request) {
-	result := a.Cache.getTtl(mux.Vars(r)[keyParam])
-	if result == -1 {
+func (rs *RestServer) getTtl(w http.ResponseWriter, r *http.Request) {
+	result := rs.cache.GetTtl(mux.Vars(r)[keyParam])
+	if result == -2 {
 		respondWithError(w, http.StatusNotFound, itemNotFoundMsg)
 	} else {
 		respondWithValue(w, http.StatusOK, result)
@@ -149,16 +176,16 @@ func (a *App) getTtl(w http.ResponseWriter, r *http.Request) {
 }
 
 //get list of cache keys
-func (a *App) getKeys(w http.ResponseWriter, r *http.Request) {
-	respondWithJSON(w, http.StatusOK, map[string][]string{valueParam: a.Cache.getKeys()})
+func (rs *RestServer) getKeys(w http.ResponseWriter, r *http.Request) {
+	respondWithJSON(w, http.StatusOK, map[string][]string{valueParam: rs.cache.GetKeys()})
 }
 
 //remove key-value pair from the cache
-func (a *App) remove(w http.ResponseWriter, r *http.Request) {
+func (rs *RestServer) remove(w http.ResponseWriter, r *http.Request) {
 	key := mux.Vars(r)[keyParam]
-	_, ok := a.Cache.get(key)
-	if ok == true {
-		a.Cache.remove(key)
+	_, exists := rs.cache.Get(key)
+	if exists == true {
+		rs.cache.Remove(key)
 		respondWithMessage(w, http.StatusOK, itemDeletedMsg)
 	} else {
 		respondWithError(w, http.StatusNotFound, itemNotFoundMsg)
@@ -166,8 +193,8 @@ func (a *App) remove(w http.ResponseWriter, r *http.Request) {
 }
 
 //persist cache data
-func (a *App) persist(w http.ResponseWriter, r *http.Request) {
-	err := a.Cache.persist()
+func (rs *RestServer) persist(w http.ResponseWriter, r *http.Request) {
+	err := rs.cache.Persist()
 	if err == nil {
 		respondWithMessage(w, http.StatusOK, dataPersistedMsg)
 	} else {
@@ -176,8 +203,8 @@ func (a *App) persist(w http.ResponseWriter, r *http.Request) {
 }
 
 //reload persisted data
-func (a *App) reload(w http.ResponseWriter, r *http.Request) {
-	err := a.Cache.reload()
+func (rs *RestServer) reload(w http.ResponseWriter, r *http.Request) {
+	err := rs.cache.Reload()
 	if err == nil {
 		respondWithMessage(w, http.StatusOK, dataReloadedMsg)
 	} else {
