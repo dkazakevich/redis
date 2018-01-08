@@ -4,7 +4,7 @@
 
 ```
     # Use 'go get' to install or upgrade (-u) the redis package
-    go get -u github.com/dkazakevich/redis
+    go get -u github.com/dkazakevich/redis/...
     
     # Use `go test` to run tests
     go test github.com/dkazakevich/redis/pkg/cache

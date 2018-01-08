@@ -9,9 +9,8 @@ import (
 	"hash/fnv"
 )
 
-//file name for persist data
-const cacheDataFileName = "cacheData.json"
-const dafultGarbageCollectionCheckItems = 20
+const defaultCacheDataFileName = "cacheData.json"
+const defultGarbageCollectionCheckItems = 20
 
 type Cache struct {
 	sync.RWMutex
@@ -23,20 +22,20 @@ type Cache struct {
 
 type Data struct {
 	sync.RWMutex
-	Map        map[string]*Item `json:"map"`        //stores key-value pair data
-	ExpireKeys map[int]string   `json:"expireKeys"` //stores expire keys with indexes for garbage collection
+	Map        map[string]*Item `json:"map"`        //key-item (with value) pair data
+	ExpireKeys map[int]string   `json:"expireKeys"` //expire keys with indexes for garbage collection to check random key expiration
 }
 
 type Item struct {
-	Value          interface{}
-	Expiration     int64
-	ExpireKeyIndex int
+	Value          interface{} //key's value
+	Expiration     int64       //expiration time
+	ExpireKeyIndex int         //expire index in the ExpireKeys data structure for garbage collection for synchronization
 }
 
 //partitions - number of cache parts separated for parallel data access
 //garbageCollectionInterval - period of time for periodical GC call
 //garbageCollectionCheckItems - number of random keys that expiration will be checked for every partition in process of GC
-//dataFileName - file name for cache data persistance
+//dataFileName - file name for persist cache data
 func NewCache(partitions int, garbageCollectionInterval time.Duration, garbageCollectionCheckItems int,
 	dataFileName ...string) *Cache {
 	c := &Cache{Data: make([]*Data, partitions), GarbageCollectionInterval: garbageCollectionInterval}
@@ -47,13 +46,13 @@ func NewCache(partitions int, garbageCollectionInterval time.Duration, garbageCo
 	if garbageCollectionCheckItems > 0 {
 		c.GarbageCollectionCheckItems = garbageCollectionCheckItems
 	} else {
-		c.GarbageCollectionCheckItems = dafultGarbageCollectionCheckItems
+		c.GarbageCollectionCheckItems = defultGarbageCollectionCheckItems
 	}
 
 	if len(dataFileName) > 0 {
 		c.DataFileName = dataFileName[0]
 	} else {
-		c.DataFileName = cacheDataFileName;
+		c.DataFileName = defaultCacheDataFileName;
 	}
 
 	if garbageCollectionInterval > 0 {
@@ -101,6 +100,8 @@ func (c *Cache) Clear() {
 func (c *Cache) getPartition(key string) *Data {
 	hash := fnv.New32a()
 	hash.Write([]byte(key))
+	c.RLock()
+	defer c.RUnlock()
 	partition := hash.Sum32() % uint32(len(c.Data))
 	return c.Data[partition]
 }
@@ -211,10 +212,11 @@ func (c *Cache) removeExpiration(data *Data, expireKeyIndex int) {
 //get list of cache keys
 func (c *Cache) GetKeys() []string {
 	keys := make([]string, 0)
+	c.RLock()
+	defer c.RUnlock()
 	for i := range c.Data {
 		data := c.Data[i]
 		data.RLock()
-
 		for key, item := range data.Map {
 			if (item.Expiration == -1) || (item.Expiration-time.Now().UnixNano() > 0) {
 				keys = append(keys, key)
@@ -254,6 +256,7 @@ func (c *Cache) garbageCollection(garbageCollectionInterval time.Duration) {
 	for {
 		select {
 		case <-ticker.C:
+			c.RLock()
 			for i := range c.Data {
 				data := c.Data[i]
 				data.RLock()
@@ -261,11 +264,11 @@ func (c *Cache) garbageCollection(garbageCollectionInterval time.Duration) {
 				data.RUnlock()
 
 				if size > 0 {
-					runGC := true
-					for runGC {
+					runGCAgain := true
+					for runGCAgain {
 						data.Lock()
 						maxIndex := len(data.ExpireKeys) - 1
-						deleted := 0
+						deletedCount := 0
 						for i := 0; (i < c.GarbageCollectionCheckItems) && (maxIndex >= 0); i++ {
 							//get random key
 							randIndex := 0
@@ -275,19 +278,20 @@ func (c *Cache) garbageCollection(garbageCollectionInterval time.Duration) {
 							key := data.ExpireKeys[randIndex]
 							item := data.Map[key]
 							if (item.Expiration != -1) && (item.Expiration-time.Now().UnixNano() < 0) {
-								deleted++
+								deletedCount++
 								c.remove(data, key)
 								maxIndex--
 							}
 						}
 						data.Unlock()
 						//repeat while deleted > 25%
-						if (deleted * 100 / c.GarbageCollectionCheckItems) <= 25 {
-							runGC = false
+						if (deletedCount * 100 / c.GarbageCollectionCheckItems) <= 25 {
+							runGCAgain = false
 						}
 					}
 				}
 			}
+			c.RUnlock()
 		}
 	}
 }

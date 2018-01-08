@@ -8,7 +8,6 @@ import (
 	"log"
 	"math/rand"
 	"github.com/dkazakevich/redis/internal/testutil"
-	"fmt"
 )
 
 const (
@@ -34,7 +33,6 @@ func TestCachePutAndGetString(t *testing.T) {
 	testutil.AssertEquals(t, true, exists)
 	testutil.AssertEquals(t, stringValue, result)
 	ttl := c.GetTtl(stringKey)
-	fmt.Println(ttl)
 	testutil.AssertEquals(t, true, (ttl > 0) && (ttl <= 20))
 }
 
@@ -70,11 +68,11 @@ func TestCacheDelete(t *testing.T) {
 func TestCacheExpireAndCheckTtl(t *testing.T) {
 	c.Put(tempStringKey, tempStringValue, -1)
 	testutil.AssertEquals(t, -1, c.GetTtl(tempStringKey))
-	c.Expire(tempStringKey, 2)
+	c.Expire(tempStringKey, 1)
 	ttl := c.GetTtl(tempStringKey)
-	testutil.AssertEquals(t, true, (ttl > 0) && (ttl <= 2))
+	testutil.AssertEquals(t, true, (ttl > 0) && (ttl <= 1))
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(2 * time.Second)
 	testutil.AssertEquals(t, -2, c.GetTtl(tempStringKey))
 	_, exists := c.Get(tempStringKey)
 	testutil.AssertEquals(t, false, exists)
@@ -125,14 +123,11 @@ func TestPutThenGetPerformance(t *testing.T) {
 	log.Printf("%v times get took %v", performanceIterations, time.Since(start))
 
 	keys := c.GetKeys()
-	log.Printf("Keys size: %v", len(keys))
-	time.Sleep(10 * time.Second)
-	keys = c.GetKeys()
-	log.Printf("Keys size: %v", len(keys))
-
 	for i := range keys {
 		c.Remove(keys[i])
 	}
+	keys = c.GetKeys()
+	testutil.AssertEquals(t, 0, len(keys))
 }
 
 func TestPutAndGetPerformance(t *testing.T) {
@@ -159,12 +154,9 @@ func TestPutAndGetPerformance(t *testing.T) {
 	log.Printf("%v times put and get took %v", performanceIterations, time.Since(start))
 
 	keys := c.GetKeys()
-	log.Printf("Keys size: %v", len(keys))
-	time.Sleep(10 * time.Second)
-	keys = c.GetKeys()
-	log.Printf("Keys size: %v", len(keys))
-
 	for i := range keys {
 		c.Remove(keys[i])
 	}
+	keys = c.GetKeys()
+	testutil.AssertEquals(t, 0, len(keys))
 }
